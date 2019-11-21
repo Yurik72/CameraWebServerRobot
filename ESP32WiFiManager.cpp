@@ -295,6 +295,7 @@ String ESP32WiFiManager::scanModal()
 void ESP32WiFiManager::scan()
 {
   if (!shouldscan) return;
+  return;
   DEBUG_WM(F("About to scan()"));
   if (wifiSSIDscan)
   {
@@ -308,6 +309,12 @@ void ESP32WiFiManager::scan()
     if (n == 0) {
       DEBUG_WM(F("No networks found"));
       // page += F("No networks found. Refresh to scan again.");
+      wifiSSIDCount = 0;
+    }
+    else if (n < 0) {
+      DEBUG_WM(F("Scan network return negative value"));
+      n = 0;
+      wifiSSIDCount = 0;
     } else {
 
 
