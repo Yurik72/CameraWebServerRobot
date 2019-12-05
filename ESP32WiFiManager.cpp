@@ -1,5 +1,5 @@
 
-#include "ESP32WiFiManager.h"
+#include "ESP32WifiManager.h"
 
 
 AsyncWiFiManagerParameter::AsyncWiFiManagerParameter(const char *custom) {
@@ -118,7 +118,7 @@ void ESP32WiFiManager::setupConfigPortal() {
 
   setInfo();
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
- 
+
 
 
   /*
@@ -253,9 +253,15 @@ boolean ESP32WiFiManager::autoConnect(char const *apName, char const *apPassword
 String ESP32WiFiManager::networkListAsString()
 {
   String pager ;
-  
+  DEBUG_WM("networkListAsString");
+  if(wifiSSIDs==NULL){
+	  DEBUG_WM("internal problem with network list");
+	  return pager;
+  }
   //display networks in page
   for (int i = 0; i < wifiSSIDCount; i++) {
+
+	  DEBUG_WM(i);
     if (wifiSSIDs[i].duplicate == true) continue; // skip dups
     int quality = getRSSIasQuality(wifiSSIDs[i].RSSI);
 
@@ -295,16 +301,29 @@ String ESP32WiFiManager::scanModal()
 void ESP32WiFiManager::scan()
 {
   if (!shouldscan) return;
-  return;
+
   DEBUG_WM(F("About to scan()"));
-  if (wifiSSIDscan)
-  {
-    delay(100);
-  }
+  DEBUG_WM(wifiSSIDscan);
+  delay(100);
+ // if (wifiSSIDscan)
+ // {
+ //   delay(100);
+//  }
 
   if (wifiSSIDscan)
   {
     int n = WiFi.scanNetworks();
+    if(n==WIFI_SCAN_RUNNING){
+    	delay(1000);
+    	n = WiFi.scanNetworks();
+    }
+    if(n==WIFI_SCAN_FAILED){
+    	WiFi.mode(WIFI_AP);
+    	delay(1000);
+    	n = WiFi.scanNetworks();
+    	delay(1000);
+    	WiFi.mode(WIFI_AP_STA);
+    }
     DEBUG_WM(F("Scan done"));
     if (n == 0) {
       DEBUG_WM(F("No networks found"));
@@ -394,7 +413,10 @@ void ESP32WiFiManager::startConfigPortalModeless(char const *apName, char const 
     DEBUG_WM(WiFi.localIP());
     //connected
     // call the callback!
-    _savecallback();
+  //  if ( _savecallback != NULL) {
+    		  //todo: check if any custom parameters actually exist, and check if they really changed maybe
+  //  		  _savecallback();
+  //  }
 
   }
 
@@ -414,6 +436,7 @@ void ESP32WiFiManager::startConfigPortalModeless(char const *apName, char const 
 void ESP32WiFiManager::loop(){
 	safeLoop();
 	criticalLoop();
+	vTaskDelay(50);
 }
 
 void ESP32WiFiManager::setInfo() {
@@ -432,7 +455,7 @@ void ESP32WiFiManager::setInfo() {
 void ESP32WiFiManager::criticalLoop(){
   if (_modeless)
   {
-
+	  vTaskDelay(50);
 	if ( scannow==-1 || millis() > scannow + 60000)
 	{
 
@@ -509,6 +532,7 @@ boolean  ESP32WiFiManager::startConfigPortal(char const *apName, char const *apP
     if ( millis() > scannow + 10000)
     {
       DEBUG_WM(F("About to scan()"));
+      DEBUG_WM(wifiSSIDscan);
       shouldscan=true;  // since we are modal, we can scan every time
       scan();
       scannow= millis() ;
@@ -744,7 +768,7 @@ esp_err_t ESP32WiFiManager::handleWifi(httpd_req_t *req,boolean scan) {
   page += FPSTR(HTTP_STYLE);
   page += _customHeadElement;
   page += FPSTR(HTTP_HEAD_END);
-  DEBUG_WM(page);
+  //DEBUG_WM(page);
   if (scan) {
     wifiSSIDscan=false;
 
@@ -757,6 +781,7 @@ esp_err_t ESP32WiFiManager::handleWifi(httpd_req_t *req,boolean scan) {
     } else {
 
 		DEBUG_WM(F("Getting network list"));
+		DEBUG_WM(wifiSSIDCount);
       //display networks in page
       String pager = networkListAsString();
 
@@ -854,7 +879,7 @@ esp_err_t ESP32WiFiManager::handleWifi(httpd_req_t *req,boolean scan) {
   httpd_resp_set_type(req, "text/html");
   return httpd_resp_send(req, page.c_str(), page.length());
   DEBUG_WM(F("Sent config page"));
-  
+
 }
 
 /** Handle the WLAN save form and redirect to WLAN config page again */
@@ -865,9 +890,9 @@ esp_err_t ESP32WiFiManager::handleWifiSave(httpd_req_t *req) {
   //SAVE/connect here
   needInfo = true;
   size_t buf_len = httpd_req_get_url_query_len(req) + 1;
-  
+
   char value[32] = { 0, };
-  char*  buf;
+  char*  buf=NULL;
   if (buf_len > 1) {
 	  buf = (char*)malloc(buf_len);
 	  if (!buf) {
@@ -881,9 +906,9 @@ esp_err_t ESP32WiFiManager::handleWifiSave(httpd_req_t *req) {
 	  }
   }
   if (httpd_query_key_value(buf, "s", value, sizeof(value)) == ESP_OK)
-	  _ssid = urldecode(value);
+	  _ssid = local_urldecode(value);
   if (httpd_query_key_value(buf, "p", value, sizeof(value)) == ESP_OK)
-	  _pass = urldecode(value);
+	  _pass = local_urldecode(value);
   //_ssid = request->arg("s").c_str();
  // _pass = request->arg("p").c_str();
 
@@ -909,21 +934,21 @@ esp_err_t ESP32WiFiManager::handleWifiSave(httpd_req_t *req) {
     DEBUG_WM(F("static ip"));
     DEBUG_WM(value);
     //_sta_static_ip.fromString(request->arg("ip"));
-    String ip = urldecode(value);
+    String ip = local_urldecode(value);
     optionalIPFromString(&_sta_static_ip, ip.c_str());
   }
  // if (request->hasArg("gw")) {
 if (httpd_query_key_value(buf, "gw", value, sizeof(value)) == ESP_OK){
     DEBUG_WM(F("static gateway"));
     DEBUG_WM(value);
-    String gw = urldecode(value);
+    String gw = local_urldecode(value);
     optionalIPFromString(&_sta_static_gw, gw.c_str());
   }
   //if (request->hasArg("sn")) {
 if (httpd_query_key_value(buf, "sn", value, sizeof(value)) == ESP_OK) {
     DEBUG_WM(F("static netmask"));
     DEBUG_WM(value);
-    String sn = urldecode(value);
+    String sn = local_urldecode(value);
     optionalIPFromString(&_sta_static_sn, sn.c_str());
   }
 
@@ -931,14 +956,14 @@ if (httpd_query_key_value(buf, "sn", value, sizeof(value)) == ESP_OK) {
 if (httpd_query_key_value(buf, "dns1", value, sizeof(value)) == ESP_OK) {
     DEBUG_WM(F("static DNS 1"));
     DEBUG_WM(value);
-    String dns1 = urldecode(value);
+    String dns1 = local_urldecode(value);
     optionalIPFromString(&_sta_static_dns1, dns1.c_str());
   }
  // if (request->hasArg("dns2")) {
 if (httpd_query_key_value(buf, "dns2", value, sizeof(value)) == ESP_OK) {
     DEBUG_WM(F("static DNS 2"));
     DEBUG_WM(value);
-    String dns2 = urldecode(value);
+    String dns2 = local_urldecode(value);
     optionalIPFromString(&_sta_static_dns2, dns2.c_str());
   }
 
@@ -959,7 +984,7 @@ if (httpd_query_key_value(buf, "dns2", value, sizeof(value)) == ESP_OK) {
   connect = true; //signal ready to connect/reset
   httpd_resp_set_type(req, "text/html");
   return httpd_resp_send(req, page.c_str(), page.length());
- 
+
 
 }
 
@@ -1036,7 +1061,7 @@ esp_err_t ESP32WiFiManager::handleInfo(httpd_req_t *req) {
 //  request->send(200, "text/html", page);
   httpd_resp_set_type(req, "text/html");
   return httpd_resp_send(req, page.c_str(), page.length());
-  
+
 
 }
 
@@ -1090,6 +1115,7 @@ esp_err_t ESP32WiFiManager::handleNotFound(httpd_req_t *req) {
   response->addHeader("Expires", "-1");
   request->send (response );
   */
+return ESP_OK;
 }
 
 
@@ -1176,7 +1202,7 @@ String ESP32WiFiManager::toStringIp(IPAddress ip) {
   return res;
 }
 
-unsigned char h2int(char c)
+unsigned char local_h2int(char c)
 {
 	if (c >= '0' && c <= '9') {
 		return((unsigned char)c - '0');
@@ -1189,7 +1215,7 @@ unsigned char h2int(char c)
 	}
 	return(0);
 }
-String urldecode(String input) // (based on https://code.google.com/p/avr-netino/)
+String local_urldecode(String input) // (based on https://code.google.com/p/avr-netino/)
 {
 	char c;
 	String ret = "";
@@ -1204,7 +1230,7 @@ String urldecode(String input) // (based on https://code.google.com/p/avr-netino
 			t++;
 			c = input[t];
 			t++;
-			c = (h2int(c) << 4) | h2int(input[t]);
+			c = (local_h2int(c) << 4) | local_h2int(input[t]);
 		}
 
 		ret.concat(c);

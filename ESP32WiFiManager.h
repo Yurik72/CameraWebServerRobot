@@ -29,11 +29,13 @@ const char HTTP_END[] PROGMEM             = "</div></body></html>";
   ESP32WiFiManager* self = (ESP32WiFiManager*)req->user_ctx; \
   if (self) \
 	  return self->handle##meth_suffix(req);\
+  return ESP_FAIL; \
   }
 #define HANDLER_FN_1(meth_suffix,param1) [](httpd_req_t *req) ->esp_err_t { \
   ESP32WiFiManager* self = (ESP32WiFiManager*)req->user_ctx; \
   if (self) \
 	  return self->handle##meth_suffix(req,param1);\
+	  return ESP_FAIL; \
   }
 #define URI_INIT(path,meth_suffix) { \
 			.uri =path,\
@@ -49,8 +51,8 @@ const char HTTP_END[] PROGMEM             = "</div></body></html>";
 			};
 
 
-unsigned char h2int(char c);
-String urldecode(String input);
+unsigned char local_h2int(char c);
+String local_urldecode(String input);
 
 class AsyncWiFiManagerParameter {
 public:
